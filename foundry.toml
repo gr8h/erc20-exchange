@@ -1,2 +1,13 @@
 [profile.ci.fuzz]
 runs = 10_000
+
+[profile.default]
+src = 'src'
+out = 'out'
+libs = ['lib']
+
+[rpc_endpoints]
+goerli = "${GOERLI_RPC_URL}"
+
+[etherscan]
+goerli = { key = "${ETHERSCAN_API_KEY}" }
