@@ -4,9 +4,10 @@ pragma solidity ^0.8.13;
 import "openzeppelin-contracts/access/Ownable.sol";
 import "openzeppelin-contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
+import "openzeppelin-contracts/security/ReentrancyGuard.sol";
 import "forge-std/console.sol";
 
-contract SimpleDEX is Ownable {
+contract SimpleDEX is Ownable, ReentrancyGuard {
     using ECDSA for bytes32;
     // Constants
     // keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -21,6 +22,7 @@ contract SimpleDEX is Ownable {
     mapping(address => bool) public supportedTokens;
     mapping(address => mapping(address => uint256)) public userBalances;
     mapping(address => mapping(uint256 => bool)) public usedNonces;
+    mapping(bytes32 => bool) public usedHashes;
 
     // Enum and Structs
     enum TradeDirection {
@@ -41,7 +43,7 @@ contract SimpleDEX is Ownable {
 
     // Modifiers
     modifier orderNotExpired(uint256 expired) {
-        require(block.timestamp <= expired, "Order has expired");
+        if (block.timestamp > expired) revert OrderExpired();
         _;
     }
 
@@ -66,20 +68,30 @@ contract SimpleDEX is Ownable {
         uint256 amount
     );
 
+    // Errors
+    error TokenNotSupported(address token);
+    error InsufficientBalance();
+    error OrderExpired();
+    error TokenPairMismatch();
+    error TradeDirectionsMustBeOpposite();
+    error InvalidSignature(address signer);
+    error NonceAlreadyUsed(address sender, uint256 nonce);
+    error HashAlreadyUsed();
+
     // Public and External Functions
     function deposit(address token, uint256 amount) external {
-        require(supportedTokens[token], "Token not supported");
+        if (!supportedTokens[token]) revert TokenNotSupported(token);
+
         IERC20(token).transferFrom(msg.sender, address(this), amount);
         userBalances[msg.sender][token] += amount;
         emit Deposited(msg.sender, token, amount);
     }
 
-    function withdraw(address token, uint256 amount) external {
-        require(supportedTokens[token], "Token not supported");
-        require(
-            userBalances[msg.sender][token] >= amount,
-            "Insufficient balance"
-        );
+    function withdraw(address token, uint256 amount) external nonReentrant {
+        if (!supportedTokens[token]) revert TokenNotSupported(token);
+        if (userBalances[msg.sender][token] < amount)
+            revert InsufficientBalance();
+
         userBalances[msg.sender][token] -= amount;
         IERC20(token).transfer(msg.sender, amount);
         emit Withdrawn(msg.sender, token, amount);
@@ -101,34 +113,25 @@ contract SimpleDEX is Ownable {
         orderNotExpired(makerOrder.expired)
         orderNotExpired(takerOrder.expired)
     {
-        require(
-            makerOrder.baseToken == takerOrder.baseToken &&
-                makerOrder.quoteToken == takerOrder.quoteToken,
-            "Token pair mismatch"
-        );
-        require(
-            makerOrder.direction != takerOrder.direction,
-            "Trade directions should be opposite"
-        );
+        if (
+            makerOrder.baseToken != takerOrder.baseToken &&
+            makerOrder.quoteToken != takerOrder.quoteToken
+        ) revert TokenPairMismatch();
 
-        require(
-            !usedNonces[makerOrder.sender][makerOrder.nonce],
-            "Maker nonce already used"
-        );
+        if (makerOrder.direction == takerOrder.direction)
+            revert TradeDirectionsMustBeOpposite();
 
-        require(
-            !usedNonces[takerOrder.sender][takerOrder.nonce],
-            "Taker nonce already used"
-        );
+        if (usedNonces[makerOrder.sender][makerOrder.nonce])
+            revert NonceAlreadyUsed(makerOrder.sender, makerOrder.nonce);
 
-        require(
-            verifySignature(makerOrder, makerOrderSignature),
-            "Invalid maker signature"
-        );
-        require(
-            verifySignature(takerOrder, takerOrderSignature),
-            "Invalid taker signature"
-        );
+        if (usedNonces[takerOrder.sender][takerOrder.nonce])
+            revert NonceAlreadyUsed(takerOrder.sender, takerOrder.nonce);
+
+        if (!verifySignature(makerOrder, makerOrderSignature))
+            revert InvalidSignature(makerOrder.sender);
+
+        if (!verifySignature(takerOrder, takerOrderSignature))
+            revert InvalidSignature(takerOrder.sender);
 
         uint8 quoteDecimals = IERC20Metadata(makerOrder.quoteToken).decimals();
 
@@ -169,8 +172,11 @@ contract SimpleDEX is Ownable {
     function verifySignature(
         Order calldata order,
         bytes calldata signature
-    ) public view returns (bool) {
+    ) public returns (bool) {
         bytes32 messageHash = getOrderHash(order);
+
+        if (usedHashes[messageHash]) revert HashAlreadyUsed();
+        usedHashes[messageHash] = true;
 
         bytes32 signedMessageHash = messageHash.toEthSignedMessageHash();
 

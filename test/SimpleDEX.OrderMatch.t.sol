@@ -54,6 +54,15 @@ contract TestSimpleDEX is Test {
         return abi.encodePacked(r, s, v);
     }
 
+    // Errors
+    bytes4 public orderExpiredSelector = bytes4(keccak256("OrderExpired()"));
+    bytes4 public tokenPairMismatchSelector =
+        bytes4(keccak256("TokenPairMismatch()"));
+    bytes4 public tradeDirectionsMustBeOppositeSelector =
+        bytes4(keccak256("TradeDirectionsMustBeOpposite()"));
+    bytes4 public nonceAlreadyUsedSelector =
+        bytes4(keccak256("NonceAlreadyUsed(address,uint256)"));
+
     function setUp() public {
         deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         makerPrivateKey = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
@@ -231,7 +240,7 @@ contract TestSimpleDEX is Test {
 
         // Match orders
         vm.startPrank(vm.addr(deployerPrivateKey));
-        vm.expectRevert(bytes("Order has expired"));
+        vm.expectRevert(abi.encodeWithSelector(orderExpiredSelector));
         dex.matchOrders(
             makerOrder,
             makerOrderSignature,
@@ -283,7 +292,7 @@ contract TestSimpleDEX is Test {
 
         // Match orders
         vm.startPrank(vm.addr(deployerPrivateKey));
-        vm.expectRevert(bytes("Token pair mismatch"));
+        vm.expectRevert(abi.encodeWithSelector(tokenPairMismatchSelector));
         dex.matchOrders(
             makerOrder,
             makerOrderSignature,
@@ -335,7 +344,9 @@ contract TestSimpleDEX is Test {
 
         // Match orders
         vm.startPrank(vm.addr(deployerPrivateKey));
-        vm.expectRevert(bytes("Trade directions should be opposite"));
+        vm.expectRevert(
+            abi.encodeWithSelector(tradeDirectionsMustBeOppositeSelector)
+        );
         dex.matchOrders(
             makerOrder,
             makerOrderSignature,
@@ -406,7 +417,13 @@ contract TestSimpleDEX is Test {
         vm.stopPrank();
 
         vm.startPrank(vm.addr(deployerPrivateKey));
-        vm.expectRevert(bytes("Maker nonce already used"));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                nonceAlreadyUsedSelector,
+                address(vm.addr(makerPrivateKey)),
+                1
+            )
+        );
         dex.matchOrders(
             makerOrder,
             makerOrderSignature,

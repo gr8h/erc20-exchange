@@ -32,6 +32,13 @@ contract TestSimpleDEX is Test {
         uint256 amount
     );
 
+    // Errors
+    bytes4 public tokenNotSupportedSelector =
+        bytes4(keccak256("TokenNotSupported(address)"));
+
+    bytes4 public insufficientBalanceSelector =
+        bytes4(keccak256("InsufficientBalance()"));
+
     function setUp() public {
         deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         makerPrivateKey = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
@@ -91,7 +98,12 @@ contract TestSimpleDEX is Test {
 
         // Act
         vm.prank(vm.addr(makerPrivateKey));
-        vm.expectRevert(bytes("Token not supported"));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                tokenNotSupportedSelector,
+                address(baseToken)
+            )
+        );
         dex.deposit(address(baseToken), amount);
 
         uint256 balance = dex.userBalances(
@@ -154,7 +166,12 @@ contract TestSimpleDEX is Test {
 
         // Act
         vm.prank(vm.addr(makerPrivateKey));
-        vm.expectRevert(bytes("Token not supported"));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                tokenNotSupportedSelector,
+                address(baseToken)
+            )
+        );
         dex.withdraw(address(baseToken), amount);
 
         uint256 balance = dex.userBalances(
@@ -268,7 +285,7 @@ contract TestSimpleDEX is Test {
 
         // Withdraw supported tokens
         vm.startPrank(vm.addr(makerPrivateKey));
-        vm.expectRevert(bytes("Insufficient balance"));
+        vm.expectRevert(abi.encodeWithSelector(insufficientBalanceSelector));
         dex.withdraw(address(baseToken), amountToWithdraw);
         vm.stopPrank();
 
