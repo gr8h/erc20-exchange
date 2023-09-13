@@ -20,6 +20,7 @@ contract SimpleDEX is Ownable {
     // State variables
     mapping(address => bool) public supportedTokens;
     mapping(address => mapping(address => uint256)) public userBalances;
+    mapping(address => mapping(uint256 => bool)) public usedNonces;
 
     // Enum and Structs
     enum TradeDirection {
@@ -111,6 +112,16 @@ contract SimpleDEX is Ownable {
         );
 
         require(
+            !usedNonces[makerOrder.sender][makerOrder.nonce],
+            "Maker nonce already used"
+        );
+
+        require(
+            !usedNonces[takerOrder.sender][takerOrder.nonce],
+            "Taker nonce already used"
+        );
+
+        require(
             verifySignature(makerOrder, makerOrderSignature),
             "Invalid maker signature"
         );
@@ -143,6 +154,10 @@ contract SimpleDEX is Ownable {
             tradePrice,
             tradeAmount
         );
+
+        // Mark nonces as used
+        usedNonces[makerOrder.sender][makerOrder.nonce] = true;
+        usedNonces[takerOrder.sender][takerOrder.nonce] = true;
     }
 
     // Internal Functions

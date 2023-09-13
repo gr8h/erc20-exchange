@@ -38,6 +38,22 @@ contract TestSimpleDEX is Test {
         _;
     }
 
+    // Helpers
+    function _generateSignature(
+        uint256 privateKey,
+        SimpleDEX.Order memory order
+    ) internal returns (bytes memory) {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        bytes32 orderHash = dex.getOrderHash(order).toEthSignedMessageHash();
+
+        (v, r, s) = vm.sign(privateKey, orderHash);
+
+        return abi.encodePacked(r, s, v);
+    }
+
     function setUp() public {
         deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         makerPrivateKey = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
@@ -95,11 +111,6 @@ contract TestSimpleDEX is Test {
     // baseToken: ERC20 token address for the base asset (It is WETH in the WETH-USDC pair)
     // quoteToken: ERC20 token address for the quote asset (e.g., stablecoin, It is USDC in the WETH-USDC pair)
     function testTradeOrder() external startAtPresentDay {
-        // Arrange
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-
         // Ac
 
         // Maker: BUY 1 WETH for 100 USDC
@@ -114,11 +125,10 @@ contract TestSimpleDEX is Test {
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex
-            .getOrderHash(makerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
+        bytes memory makerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            makerOrder
+        );
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -131,11 +141,11 @@ contract TestSimpleDEX is Test {
             address(mockWETH),
             address(mockUSDC)
         );
-        bytes32 takerOrderHash = dex
-            .getOrderHash(takerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
+
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
 
         // Assert
 
@@ -233,11 +243,6 @@ contract TestSimpleDEX is Test {
 
     // should fail to execute trade if maker's balance is insufficient
     function testExecuteTradeInsufficientBalance() external startAtPresentDay {
-        // Arrange
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-
         // Ac
 
         // Maker: BUY 1 WETH for 100 USDC
@@ -252,11 +257,10 @@ contract TestSimpleDEX is Test {
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex
-            .getOrderHash(makerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
+        bytes memory makerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            makerOrder
+        );
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -269,11 +273,11 @@ contract TestSimpleDEX is Test {
             address(mockWETH),
             address(mockUSDC)
         );
-        bytes32 takerOrderHash = dex
-            .getOrderHash(takerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
+
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
 
         // Assert
 

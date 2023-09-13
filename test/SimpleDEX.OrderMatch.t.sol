@@ -38,6 +38,22 @@ contract TestSimpleDEX is Test {
         _;
     }
 
+    // Helpers
+    function _generateSignature(
+        uint256 privateKey,
+        SimpleDEX.Order memory order
+    ) internal returns (bytes memory) {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        bytes32 orderHash = dex.getOrderHash(order).toEthSignedMessageHash();
+
+        (v, r, s) = vm.sign(privateKey, orderHash);
+
+        return abi.encodePacked(r, s, v);
+    }
+
     function setUp() public {
         deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         makerPrivateKey = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
@@ -124,12 +140,11 @@ contract TestSimpleDEX is Test {
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex
-            .getOrderHash(makerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
+        bytes memory makerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            makerOrder
+        );
 
-        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
         assertEq(makerOrderSignature.length, 65);
 
         // Taker: SELL 1 WETH for 80 USDC
@@ -147,7 +162,10 @@ contract TestSimpleDEX is Test {
             .getOrderHash(takerOrder)
             .toEthSignedMessageHash();
         (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
 
         // Assert
         vm.expectEmit(true, true, true, true);
@@ -173,11 +191,6 @@ contract TestSimpleDEX is Test {
 
     // should fail to match orders with expired maker order
     function testMatchExpiredOrder() external startAtPresentDay {
-        // Arrange
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-
         // Ac
 
         // Maker: BUY 1 WETH for 100 USDC
@@ -192,11 +205,10 @@ contract TestSimpleDEX is Test {
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex
-            .getOrderHash(makerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
+        bytes memory makerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            makerOrder
+        );
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -209,11 +221,11 @@ contract TestSimpleDEX is Test {
             address(mockWETH),
             address(mockUSDC)
         );
-        bytes32 takerOrderHash = dex
-            .getOrderHash(takerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
+
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
 
         // Assert
 
@@ -230,12 +242,7 @@ contract TestSimpleDEX is Test {
     }
 
     // should fail to match orders with different token pairs
-    function testMatchWrongPairOrder() external {
-        // Arrange
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-
+    function testMatchWrongPairOrder() external startAtPresentDay {
         // Ac
 
         // Maker: BUY 1 WETH for 100 USDC
@@ -245,16 +252,15 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.BUY,
             100,
             1 ether,
-            10,
+            _PRESENT_DAY + 1 days,
             address(mockWETH),
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex
-            .getOrderHash(makerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
+        bytes memory makerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            makerOrder
+        );
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -263,20 +269,18 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.SELL,
             80,
             1 ether,
-            15,
+            _PRESENT_DAY + 1 days,
             address(mockUSDC),
             address(mockWETH)
         );
-        bytes32 takerOrderHash = dex
-            .getOrderHash(takerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
+
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
 
         // Assert
 
-        // Move time
-        vm.warp(5);
         // Match orders
         vm.startPrank(vm.addr(deployerPrivateKey));
         vm.expectRevert(bytes("Token pair mismatch"));
@@ -290,12 +294,7 @@ contract TestSimpleDEX is Test {
     }
 
     // should fail to match orders with same trade direction
-    function testMatchSameDirectionOrder() external {
-        // Arrange
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-
+    function testMatchSameDirectionOrder() external startAtPresentDay {
         // Ac
 
         // Maker: BUY 1 WETH for 100 USDC
@@ -305,16 +304,15 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.BUY,
             100,
             1 ether,
-            10,
+            _PRESENT_DAY + 1 days,
             address(mockWETH),
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex
-            .getOrderHash(makerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
+        bytes memory makerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            makerOrder
+        );
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -323,23 +321,92 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.BUY,
             80,
             1 ether,
-            15,
+            _PRESENT_DAY + 1 days,
             address(mockWETH),
             address(mockUSDC)
         );
-        bytes32 takerOrderHash = dex
-            .getOrderHash(takerOrder)
-            .toEthSignedMessageHash();
-        (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
+
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
 
         // Assert
 
-        // Move time
-        vm.warp(5);
         // Match orders
         vm.startPrank(vm.addr(deployerPrivateKey));
         vm.expectRevert(bytes("Trade directions should be opposite"));
+        dex.matchOrders(
+            makerOrder,
+            makerOrderSignature,
+            takerOrder,
+            takerOrderSignature
+        );
+        vm.stopPrank();
+    }
+
+    function testNounce() external startAtPresentDay {
+        // Ac
+
+        // Maker: BUY 1 WETH for 100 USDC
+        SimpleDEX.Order memory makerOrder = SimpleDEX.Order(
+            1,
+            address(vm.addr(makerPrivateKey)),
+            SimpleDEX.TradeDirection.BUY,
+            100,
+            1 ether,
+            _PRESENT_DAY + 1 days,
+            address(mockWETH),
+            address(mockUSDC)
+        );
+
+        bytes memory makerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            makerOrder
+        );
+
+        assertEq(makerOrderSignature.length, 65);
+
+        // Taker: SELL 1 WETH for 80 USDC
+        SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
+            1,
+            address(vm.addr(takerPrivateKey)),
+            SimpleDEX.TradeDirection.SELL,
+            80,
+            1 ether,
+            _PRESENT_DAY + 1 days,
+            address(mockWETH),
+            address(mockUSDC)
+        );
+
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
+
+        // Assert
+        vm.expectEmit(true, true, true, true);
+        emit OrderMatched(
+            makerOrder.baseToken,
+            takerOrder.quoteToken,
+            makerOrder.sender,
+            takerOrder.sender,
+            80 * 10 ** 6,
+            1 ether
+        );
+
+        // Match orders
+        vm.startPrank(vm.addr(deployerPrivateKey));
+        dex.matchOrders(
+            makerOrder,
+            makerOrderSignature,
+            takerOrder,
+            takerOrderSignature
+        );
+        vm.stopPrank();
+
+        vm.startPrank(vm.addr(deployerPrivateKey));
+        vm.expectRevert(bytes("Maker nonce already used"));
         dex.matchOrders(
             makerOrder,
             makerOrderSignature,
