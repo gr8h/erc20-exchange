@@ -6,32 +6,39 @@ import "forge-std/Test.sol";
 import "src/SimpleDEX.sol";
 import "./helper/MockERC20.sol";
 import "./helper/MockERC20Decimal6.sol";
-import "./helper/SigUtils.sol";
+import "openzeppelin-contracts/utils/cryptography/ECDSA.sol";
 
 contract TestSimpleDEX is Test {
+    using ECDSA for bytes32;
     // Global variables
-    SimpleDEX dex;
-    MockERC20 mockWETH;
-    MockERC20Decimal6 mockUSDC;
-    SigUtils internal sigUtils;
+    SimpleDEX public dex;
+    MockERC20 public mockWETH;
+    MockERC20Decimal6 public mockUSDC;
 
-    uint256 internal deployerPrivateKey;
-    uint256 internal makerPrivateKey;
-    uint256 internal takerPrivateKey;
+    uint256 public deployerPrivateKey;
+    uint256 public makerPrivateKey;
+    uint256 public takerPrivateKey;
 
     // Constants
-    uint256 internal constant INIT_BALANCE = 100;
+    uint256 internal constant _PRESENT_DAY = 1680616584;
 
     // Events
     event OrderMatched(
-        address indexed maker,
-        address indexed taker,
-        uint256 matchedPrice
+        address indexed baseToken,
+        address indexed quoteToken,
+        address maker,
+        address taker,
+        uint256 indexed price,
+        uint256 amount
     );
 
-    function setUp() public {
-        sigUtils = new SigUtils();
+    // Modifier
+    modifier startAtPresentDay() {
+        vm.warp(_PRESENT_DAY);
+        _;
+    }
 
+    function setUp() public {
         deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         makerPrivateKey = 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d;
         takerPrivateKey = 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a;
@@ -97,7 +104,7 @@ contract TestSimpleDEX is Test {
     // Because A is the maker, the trade should happen at 80 USDC since it gives A the best price.
     // baseToken: ERC20 token address for the base asset (It is WETH in the WETH-USDC pair)
     // quoteToken: ERC20 token address for the quote asset (e.g., stablecoin, It is USDC in the WETH-USDC pair)
-    function testMatchOrder() external {
+    function testMatchOrder() external startAtPresentDay {
         // Arrange
         uint8 v;
         bytes32 r;
@@ -112,14 +119,18 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.BUY,
             100,
             1 ether,
-            10,
+            _PRESENT_DAY + 1 days,
             address(mockWETH),
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex.getOrderHash(makerOrder);
+        bytes32 makerOrderHash = dex
+            .getOrderHash(makerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = sigUtils.fromVRS(v, r, s);
+
+        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
+        assertEq(makerOrderSignature.length, 65);
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -128,17 +139,26 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.SELL,
             80,
             1 ether,
-            10,
+            _PRESENT_DAY + 1 days,
             address(mockWETH),
             address(mockUSDC)
         );
-        bytes32 takerOrderHash = dex.getOrderHash(takerOrder);
+        bytes32 takerOrderHash = dex
+            .getOrderHash(takerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = sigUtils.fromVRS(v, r, s);
+        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
 
         // Assert
         vm.expectEmit(true, true, true, true);
-        emit OrderMatched(makerOrder.sender, takerOrder.sender, 80 * 10 ** 6);
+        emit OrderMatched(
+            makerOrder.baseToken,
+            takerOrder.quoteToken,
+            makerOrder.sender,
+            takerOrder.sender,
+            80 * 10 ** 6,
+            1 ether
+        );
 
         // Match orders
         vm.startPrank(vm.addr(deployerPrivateKey));
@@ -152,7 +172,7 @@ contract TestSimpleDEX is Test {
     }
 
     // should fail to match orders with expired maker order
-    function testMatchExpiredOrder() external {
+    function testMatchExpiredOrder() external startAtPresentDay {
         // Arrange
         uint8 v;
         bytes32 r;
@@ -167,14 +187,16 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.BUY,
             100,
             1 ether,
-            10,
+            _PRESENT_DAY + 1 days,
             address(mockWETH),
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex.getOrderHash(makerOrder);
+        bytes32 makerOrderHash = dex
+            .getOrderHash(makerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = sigUtils.fromVRS(v, r, s);
+        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -183,18 +205,18 @@ contract TestSimpleDEX is Test {
             SimpleDEX.TradeDirection.SELL,
             80,
             1 ether,
-            15,
+            _PRESENT_DAY - 2 days,
             address(mockWETH),
             address(mockUSDC)
         );
-        bytes32 takerOrderHash = dex.getOrderHash(takerOrder);
+        bytes32 takerOrderHash = dex
+            .getOrderHash(takerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = sigUtils.fromVRS(v, r, s);
+        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
 
         // Assert
 
-        // Move time
-        vm.warp(11);
         // Match orders
         vm.startPrank(vm.addr(deployerPrivateKey));
         vm.expectRevert(bytes("Order has expired"));
@@ -228,9 +250,11 @@ contract TestSimpleDEX is Test {
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex.getOrderHash(makerOrder);
+        bytes32 makerOrderHash = dex
+            .getOrderHash(makerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = sigUtils.fromVRS(v, r, s);
+        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -243,9 +267,11 @@ contract TestSimpleDEX is Test {
             address(mockUSDC),
             address(mockWETH)
         );
-        bytes32 takerOrderHash = dex.getOrderHash(takerOrder);
+        bytes32 takerOrderHash = dex
+            .getOrderHash(takerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = sigUtils.fromVRS(v, r, s);
+        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
 
         // Assert
 
@@ -284,9 +310,11 @@ contract TestSimpleDEX is Test {
             address(mockUSDC)
         );
 
-        bytes32 makerOrderHash = dex.getOrderHash(makerOrder);
+        bytes32 makerOrderHash = dex
+            .getOrderHash(makerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(makerPrivateKey, makerOrderHash);
-        bytes memory makerOrderSignature = sigUtils.fromVRS(v, r, s);
+        bytes memory makerOrderSignature = abi.encodePacked(r, s, v);
 
         // Taker: SELL 1 WETH for 80 USDC
         SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
@@ -299,9 +327,11 @@ contract TestSimpleDEX is Test {
             address(mockWETH),
             address(mockUSDC)
         );
-        bytes32 takerOrderHash = dex.getOrderHash(takerOrder);
+        bytes32 takerOrderHash = dex
+            .getOrderHash(takerOrder)
+            .toEthSignedMessageHash();
         (v, r, s) = vm.sign(takerPrivateKey, takerOrderHash);
-        bytes memory takerOrderSignature = sigUtils.fromVRS(v, r, s);
+        bytes memory takerOrderSignature = abi.encodePacked(r, s, v);
 
         // Assert
 

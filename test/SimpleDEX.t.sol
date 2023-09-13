@@ -8,16 +8,29 @@ import "./helper/MockERC20.sol";
 
 contract TestSimpleDEX is Test {
     // Global variables
-    SimpleDEX dex;
-    MockERC20 baseToken;
-    MockERC20 quoteToken;
+    SimpleDEX public dex;
+    MockERC20 public baseToken;
+    MockERC20 public quoteToken;
 
-    uint256 internal deployerPrivateKey;
-    uint256 internal makerPrivateKey;
-    uint256 internal takerPrivateKey;
+    uint256 public deployerPrivateKey;
+    uint256 public makerPrivateKey;
+    uint256 public takerPrivateKey;
 
     // Constants
-    uint256 internal constant INIT_BALANCE = 100;
+    uint256 internal constant _INIT_BALANCE = 100;
+
+    // Events
+    event AddSupportedToken(address indexed token);
+    event Deposited(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+    event Withdrawn(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
 
     function setUp() public {
         deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
@@ -33,10 +46,10 @@ contract TestSimpleDEX is Test {
         quoteToken = new MockERC20("QuoteToken", "QT");
 
         // Mint ERC20 tokens
-        baseToken.mint(address(vm.addr(makerPrivateKey)), INIT_BALANCE);
+        baseToken.mint(address(vm.addr(makerPrivateKey)), _INIT_BALANCE);
         vm.deal(address(vm.addr(makerPrivateKey)), 10 ether);
 
-        quoteToken.mint(address(vm.addr(takerPrivateKey)), INIT_BALANCE);
+        quoteToken.mint(address(vm.addr(takerPrivateKey)), _INIT_BALANCE);
         vm.deal(address(vm.addr(takerPrivateKey)), 10 ether);
     }
 
@@ -53,11 +66,18 @@ contract TestSimpleDEX is Test {
     function testAddSupportedToken() external {
         // Act
         vm.startPrank(vm.addr(deployerPrivateKey));
+
+        vm.expectEmit(true, false, false, true);
+        emit AddSupportedToken(address(baseToken));
         dex.addSupportedToken(address(baseToken));
+
+        vm.expectEmit(true, false, false, true);
+        emit AddSupportedToken(address(quoteToken));
         dex.addSupportedToken(address(quoteToken));
         vm.stopPrank();
 
         bool isBaseTokenSupported = dex.supportedTokens(address(baseToken));
+
         bool isQuoteTokenSupported = dex.supportedTokens(address(quoteToken));
 
         // Assert
@@ -97,11 +117,19 @@ contract TestSimpleDEX is Test {
         uint256 makerBaseTokenBalance = baseToken.balanceOf(
             address(vm.addr(makerPrivateKey))
         );
-        assertEq(makerBaseTokenBalance, INIT_BALANCE, "balance should be 100");
+        assertEq(makerBaseTokenBalance, _INIT_BALANCE, "balance should be 100");
 
         // Deposit supported tokens
         vm.startPrank(vm.addr(makerPrivateKey));
         baseToken.approve(address(dex), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit Deposited(
+            address(vm.addr(makerPrivateKey)),
+            address(baseToken),
+            amount
+        );
+
         dex.deposit(address(baseToken), amount);
         vm.stopPrank();
 
@@ -116,7 +144,7 @@ contract TestSimpleDEX is Test {
 
         // Assert
         assertEq(balance, amount, "balance should be 10");
-        assertEq(makerBaseTokenBalanceAfter, INIT_BALANCE - amount);
+        assertEq(makerBaseTokenBalanceAfter, _INIT_BALANCE - amount);
         assertLt(makerBaseTokenBalanceAfter, makerBaseTokenBalance);
     }
 
@@ -153,7 +181,7 @@ contract TestSimpleDEX is Test {
         uint256 makerBaseTokenBalance = baseToken.balanceOf(
             address(vm.addr(makerPrivateKey))
         );
-        assertEq(makerBaseTokenBalance, INIT_BALANCE);
+        assertEq(makerBaseTokenBalance, _INIT_BALANCE);
 
         // Deposit supported tokens
         vm.startPrank(vm.addr(makerPrivateKey));
@@ -172,11 +200,17 @@ contract TestSimpleDEX is Test {
 
         // Assert
         assertEq(balance, amount, "balance should be 10");
-        assertEq(makerBaseTokenBalanceAfter, INIT_BALANCE - amount);
+        assertEq(makerBaseTokenBalanceAfter, _INIT_BALANCE - amount);
         assertLt(makerBaseTokenBalanceAfter, makerBaseTokenBalance);
 
         // Withdraw supported tokens
         vm.startPrank(vm.addr(makerPrivateKey));
+        vm.expectEmit(true, true, true, true);
+        emit Withdrawn(
+            address(vm.addr(makerPrivateKey)),
+            address(baseToken),
+            amount
+        );
         dex.withdraw(address(baseToken), amount);
         vm.stopPrank();
 
@@ -191,7 +225,7 @@ contract TestSimpleDEX is Test {
 
         // Assert
         assertEq(balanceAfter, 0, "balance should be 0");
-        assertEq(makerBaseTokenBalanceAfterWithdrawal, INIT_BALANCE);
+        assertEq(makerBaseTokenBalanceAfterWithdrawal, _INIT_BALANCE);
         assertEq(makerBaseTokenBalanceAfterWithdrawal, makerBaseTokenBalance);
     }
 
@@ -210,7 +244,7 @@ contract TestSimpleDEX is Test {
         uint256 makerBaseTokenBalance = baseToken.balanceOf(
             address(vm.addr(makerPrivateKey))
         );
-        assertEq(makerBaseTokenBalance, INIT_BALANCE);
+        assertEq(makerBaseTokenBalance, _INIT_BALANCE);
 
         // Deposit supported tokens
         vm.startPrank(vm.addr(makerPrivateKey));
@@ -229,7 +263,7 @@ contract TestSimpleDEX is Test {
 
         // Assert
         assertEq(balance, amount, "balance should be 10");
-        assertEq(makerBaseTokenBalanceAfter, INIT_BALANCE - amount);
+        assertEq(makerBaseTokenBalanceAfter, _INIT_BALANCE - amount);
         assertLt(makerBaseTokenBalanceAfter, makerBaseTokenBalance);
 
         // Withdraw supported tokens
