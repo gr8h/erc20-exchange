@@ -48,7 +48,7 @@ contract SimpleDEX is Ownable, ReentrancyGuard {
     }
 
     // Events
-    event AddSupportedToken(address indexed token);
+    event TokenAdded(address indexed token);
     event Deposited(
         address indexed user,
         address indexed token,
@@ -99,7 +99,7 @@ contract SimpleDEX is Ownable, ReentrancyGuard {
 
     function addSupportedToken(address token) external onlyOwner {
         supportedTokens[token] = true;
-        emit AddSupportedToken(token);
+        emit TokenAdded(token);
     }
 
     function matchOrders(

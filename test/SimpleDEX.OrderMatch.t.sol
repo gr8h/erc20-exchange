@@ -42,7 +42,7 @@ contract TestSimpleDEX is Test {
     function _generateSignature(
         uint256 privateKey,
         SimpleDEX.Order memory order
-    ) internal returns (bytes memory) {
+    ) internal view returns (bytes memory) {
         uint8 v;
         bytes32 r;
         bytes32 s;

@@ -20,7 +20,7 @@ contract TestSimpleDEX is Test {
     uint256 internal constant _INIT_BALANCE = 100;
 
     // Events
-    event AddSupportedToken(address indexed token);
+    event TokenAdded(address indexed token);
     event Deposited(
         address indexed user,
         address indexed token,
@@ -75,11 +75,11 @@ contract TestSimpleDEX is Test {
         vm.startPrank(vm.addr(deployerPrivateKey));
 
         vm.expectEmit(true, false, false, true);
-        emit AddSupportedToken(address(baseToken));
+        emit TokenAdded(address(baseToken));
         dex.addSupportedToken(address(baseToken));
 
         vm.expectEmit(true, false, false, true);
-        emit AddSupportedToken(address(quoteToken));
+        emit TokenAdded(address(quoteToken));
         dex.addSupportedToken(address(quoteToken));
         vm.stopPrank();
 
