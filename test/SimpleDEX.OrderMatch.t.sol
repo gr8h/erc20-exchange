@@ -356,6 +356,55 @@ contract TestSimpleDEX is Test {
         vm.stopPrank();
     }
 
+    //verifySignature
+    function testVerifySignature() external {
+        SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
+            1,
+            address(vm.addr(takerPrivateKey)),
+            SimpleDEX.TradeDirection.BUY,
+            80,
+            1 ether,
+            _PRESENT_DAY + 1 days,
+            address(mockWETH),
+            address(mockUSDC)
+        );
+
+        bytes memory takerOrderSignature = _generateSignature(
+            takerPrivateKey,
+            takerOrder
+        );
+
+        assertEq(takerOrderSignature.length, 65, "invalid signature length");
+        assertTrue(
+            dex.verifySignature(takerOrder, takerOrderSignature),
+            "verifySignature failed"
+        );
+    }
+
+    function tesFailVerifySignature() external {
+        SimpleDEX.Order memory takerOrder = SimpleDEX.Order(
+            1,
+            address(vm.addr(takerPrivateKey)),
+            SimpleDEX.TradeDirection.BUY,
+            80,
+            1 ether,
+            _PRESENT_DAY + 1 days,
+            address(mockWETH),
+            address(mockUSDC)
+        );
+
+        bytes memory takerOrderSignature = _generateSignature(
+            makerPrivateKey,
+            takerOrder
+        );
+
+        assertEq(takerOrderSignature.length, 65, "invalid signature length");
+        assertTrue(
+            dex.verifySignature(takerOrder, takerOrderSignature),
+            "verifySignature failed"
+        );
+    }
+
     function testNounce() external startAtPresentDay {
         // Ac
 
@@ -406,7 +455,7 @@ contract TestSimpleDEX is Test {
             1 ether
         );
 
-        // Match orders
+        // Match same orders
         vm.startPrank(vm.addr(deployerPrivateKey));
         dex.matchOrders(
             makerOrder,
